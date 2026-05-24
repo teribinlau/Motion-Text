@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Motion Typography Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        @font-face {
+            font-family: 'MiSans';
+            src: local('MiSans'),
+                 url('file:///C:/Users/yings/Downloads/Fonts/MiSans/MiSans/otf/MiSans-Regular.otf') format('opentype');
+            font-weight: 400;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: 'MiSans';
+            src: local('MiSans Medium'),
+                 url('file:///C:/Users/yings/Downloads/Fonts/MiSans/MiSans/otf/MiSans-Medium.otf') format('opentype');
+            font-weight: 500;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: 'MiSans';
+            src: local('MiSans Bold'),
+                 url('file:///C:/Users/yings/Downloads/Fonts/MiSans/MiSans/otf/MiSans-Bold.otf') format('opentype');
+            font-weight: 700;
+            font-style: normal;
+        }
+
+        :root {
+            --bg-color: #fdfcfc; /* Canvas Cream */
+            --container-color: #201d1d; /* Ink */
+            --text-pill-bg: #f8f7f7; /* Soft Surface */
+            --text-pill-color: #201d1d; /* Ink */
+        }
+        
+        * {
+            box-sizing: border-box;
+            touch-action: manipulation;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        input, textarea, select {
+            -webkit-user-select: auto;
+            user-select: auto;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            background-image: 
+                linear-gradient(rgba(32, 29, 29, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(32, 29, 29, 0.03) 1px, transparent 1px);
+            background-size: 80px 80px;
+            background-position: center center;
+            font-family: 'JetBrains Mono', 'IBM Plex Mono', monospace;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            touch-action: none;
+        }
+
+        #ui-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 320px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+            background: #fdfcfc;
+            border: 1px solid #201d1d;
+            border-radius: 4px;
+            padding: 24px;
+            z-index: 10;
+            color: #201d1d;
+            box-shadow: none;
+            transition: transform 0.3s ease, max-height 0.3s ease;
+        }
+
+        #ui-panel.minimized {
+            max-height: 48px;
+            overflow: hidden;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f8f7f7;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #646262;
+            border-radius: 2px;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]:focus {
+            outline: none;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 2px;
+            cursor: pointer;
+            background: #201d1d;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            height: 14px;
+            width: 8px;
+            border-radius: 2px;
+            background: #201d1d;
+            cursor: pointer;
+            -webkit-appearance: none;
+            margin-top: -6px;
+            border: 1px solid #fdfcfc;
+        }
+        input[type=range]::-moz-range-track {
+            width: 100%;
+            height: 2px;
+            cursor: pointer;
+            background: #201d1d;
+        }
+        input[type=range]::-moz-range-thumb {
+            height: 14px;
+            width: 8px;
+            border-radius: 2px;
+            background: #201d1d;
+            cursor: pointer;
+            border: 1px solid #fdfcfc;
+        }
+
+        @media (max-width: 768px) {
+            #ui-panel {
+                top: auto;
+                bottom: 0;
+                left: 0;
+                width: 100%;
+                max-height: 45vh;
+                border-radius: 4px 4px 0 0;
+                border-bottom: none;
+                border-left: none;
+                border-right: none;
+                padding: 16px;
+                transform: translateY(calc(100% - 48px));
+            }
+            #ui-panel.expanded {
+                transform: translateY(0);
+            }
+            .mobile-handle {
+                display: block;
+                width: 32px;
+                height: 2px;
+                background: #201d1d;
+                margin: 0 auto 12px auto;
+            }
+        }
+        
+        .mobile-handle {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container">
+        <canvas id="world"></canvas>
+        <div id="draw-overlay" class="absolute inset-0 pointer-events-none hidden flex-col items-center justify-start pt-20 z-20">
+            <div class="bg-[#ff3b30] text-[#fdfcfc] px-6 py-3 rounded-[4px] border border-[#fdfcfc] font-bold text-xs tracking-wider">
+                [ DRAW MODE ACTIVE ] - DRAW YOUR CONTAINER ON THE SCREEN
+            </div>
+        </div>
+    </div>
+
+    <div id="ui-panel" class="custom-scrollbar flex flex-col gap-4">
+        <div class="mobile-handle" id="mobile-toggle"></div>
+
+        <div class="flex justify-between items-center border-b border-[#201d1d]/12 pb-2 mb-1">
+            <span class="text-xs font-bold tracking-wider text-[#201d1d]">[ MOTION_TYPE.CFG ]</span>
+            <button id="btn-minimize" class="text-xs font-bold text-[#646262] hover:text-[#201d1d] transition-colors">[−]</button>
+        </div>
+        
+        <div>
+            <h1 class="text-lg font-bold text-[#201d1d] tracking-tight">MOTION TYPE</h1>
+            <p class="text-xs text-[#646262]">Physics-based typography generator</p>
+        </div>
+
+        <div class="flex flex-col gap-2">
+            <label class="text-xs font-semibold text-[#646262]">Input Text</label>
+            <textarea id="text-input" rows="3" class="w-full bg-[#f8f7f7] border border-[#201d1d]/12 rounded-[4px] p-3 text-sm text-[#201d1d] focus:outline-none focus:bg-[#fdfcfc] focus:border-[#201d1d] transition-colors resize-none">请 把 你 想要 写的 内容， 写在 这里！ made by ilililab</textarea>
+            <button id="btn-generate" class="w-full bg-[#201d1d] hover:bg-[#0f0000] text-[#fdfcfc] font-bold py-2 px-4 rounded-[4px] transition-colors text-sm">
+                Generate Thoughts
+            </button>
+        </div>
+
+        <div class="w-full h-px bg-[#201d1d]/12 my-1"></div>
+
+        <div class="flex flex-col gap-4">
+            <div>
+                <div class="flex justify-between text-xs text-[#646262] mb-1">
+                    <span>Gravity</span>
+                    <span id="val-gravity">0.4</span>
+                </div>
+                <input type="range" id="slider-gravity" min="0" max="3" step="0.1" value="0.4">
+            </div>
+
+            <div>
+                <div class="flex justify-between text-xs text-[#646262] mb-1">
+                    <span>Bounciness</span>
+                    <span id="val-bounce">0.4</span>
+                </div>
+                <input type="range" id="slider-bounce" min="0" max="1" step="0.1" value="0.4">
+            </div>
+
+            <div>
+                <div class="flex justify-between text-xs text-[#646262] mb-1">
+                    <span>Corner Radius</span>
+                    <span id="val-radius">20%</span>
+                </div>
+                <input type="range" id="slider-radius" min="0" max="100" step="5" value="20">
+            </div>
+
+            <div class="flex gap-3">
+                <div class="flex-1">
+                    <div class="flex justify-between text-[11px] text-[#646262] mb-1">
+                        <span>[T] Text</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="color" id="color-text-pill" value="#f8f7f7" class="w-full h-8 rounded-[4px] cursor-pointer bg-[#f8f7f7] border border-[#201d1d]/12 p-0.5 outline-none focus:border-[#201d1d]">
+                    </div>
+                </div>
+                <div class="flex-1">
+                    <div class="flex justify-between text-[11px] text-[#646262] mb-1">
+                        <span>[S] Shape</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="color" id="color-container" value="#201d1d" class="w-full h-8 rounded-[4px] cursor-pointer bg-[#f8f7f7] border border-[#201d1d]/12 p-0.5 outline-none focus:border-[#201d1d]">
+                    </div>
+                </div>
+                <div class="flex-1">
+                    <div class="flex justify-between text-[11px] text-[#646262] mb-1">
+                        <span>[B] BG</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="color" id="color-bg" value="#fdfcfc" class="w-full h-8 rounded-[4px] cursor-pointer bg-[#f8f7f7] border border-[#201d1d]/12 p-0.5 outline-none focus:border-[#201d1d]">
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <div class="flex justify-between text-xs text-[#646262] mb-1">
+                    <span>Decorations (Multi-select)</span>
+                </div>
+                <div class="flex flex-wrap gap-1.5" id="decoration-toggles">
+                    <button class="dec-toggle border text-[11px] px-2 py-1 rounded-[4px] transition-colors" data-type="circle">Circle</button>
+                    <button class="dec-toggle border text-[11px] px-2 py-1 rounded-[4px] transition-colors" data-type="square">Square</button>
+                    <button class="dec-toggle border text-[11px] px-2 py-1 rounded-[4px] transition-colors" data-type="triangle">Triangle</button>
+                    <button class="dec-toggle border text-[11px] px-2 py-1 rounded-[4px] transition-colors" data-type="pentagon">Pentagon</button>
+                    <button class="dec-toggle border text-[11px] px-2 py-1 rounded-[4px] transition-colors" data-type="hexagon">Hexagon</button>
+                    <button class="dec-toggle border text-[11px] px-2 py-1 rounded-[4px] transition-colors" data-type="nonagon">Nonagon</button>
+                    <button class="dec-toggle border text-[11px] px-2 py-1 rounded-[4px] transition-colors" data-type="emoji">Emoji</button>
+                </div>
+            </div>
+
+            <div>
+                <div class="flex justify-between text-xs text-[#646262] mb-1">
+                    <span>Container Shape</span>
+                </div>
+                <div class="flex gap-2">
+                    <select id="select-shape" class="w-full bg-[#f8f7f7] border border-[#201d1d]/12 rounded-[4px] p-2 text-sm text-[#201d1d] focus:outline-none focus:border-[#201d1d] transition-colors cursor-pointer outline-none">
+                        <option value="initial">Initial Model</option>
+                        <option value="triangle_inverted">Inverted Triangle</option>
+                        <option value="trapezoid">Trapezoid</option>
+                        <option value="semicircle">Semicircle</option>
+                        <option value="rectangle">Rectangle</option>
+                        <option value="custom">Custom Drawn</option>
+                    </select>
+                    <button id="btn-draw" class="bg-transparent hover:bg-[#201d1d] hover:text-[#fdfcfc] border border-[#201d1d]/12 rounded-[4px] px-3.5 flex items-center justify-center text-[#201d1d] transition-colors" title="Draw Custom Shape">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="text-[10px] text-[#646262] mt-2 text-center">
+            Drag objects or resize container handles
+        </div>
+    </div>
+
+<script>
+    // --- Matter.js Aliases ---
+    const Engine = Matter.Engine,
+          Render = Matter.Render,
+          Runner = Matter.Runner,
+          Bodies = Matter.Bodies,
+          Composite = Matter.Composite,
+          Mouse = Matter.Mouse,
+          MouseConstraint = Matter.MouseConstraint,
+          Events = Matter.Events,
+          Body = Matter.Body,
+          Vector = Matter.Vector;
+
+    // --- Setup ---
+    const canvas = document.getElementById('world');
+    const ctx = canvas.getContext('2d');
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+    canvas.width = width;
+    canvas.height = height;
+
+    const engine = Engine.create();
+    const world = engine.world;
+    engine.gravity.y = 0.4;
+    const boundaryCategory = 0x0002;
+
+    // --- Visual Settings ---
+    const colors = ['#007aff', '#ff3b30', '#ff9f0a', '#30d158', '#9a9898']; // Apple HIG Accent, Danger, Warning, Success, Ash
+    let containerColor = '#201d1d'; // Ink
+    let textPillBgColor = '#f8f7f7'; // Soft Surface
+    let textFontColor = '#201d1d'; // Ink
+    const bgColor = '#fdfcfc'; // Canvas Cream
+    const wallThickness = 100;
+    let textPillRadiusRatio = 0.1; // 0 to 0.5 (pill)
+    
+    let textBodies = [];
+    let dotBodies = [];
+    let boundaries = [];
+    let dropInterval = null;
+
+    // --- Decorations State ---
+    let activeDecorations = ['circle'];
+    const emojisList = ['😀', '😂', '🥰', '😎', '🤔', '🤯', '🥳', '👻', '👽', '💩', '✨', '🔥', '❤️'];
+
+    // --- Drawing State ---
+    let isDrawingMode = false;
+    let isDrawingActive = false;
+    let isMinimized = false;
+    let drawnPoints = [];
+    const customWallThickness = 40;
+
+    // --- Container State & Boundaries ---
+    let containerShape = 'initial';
+    let container = {
+        x: width / 2,
+        y: height / 2 + 50,
+        w: Math.min(width * 0.85, 450),
+        h: Math.min(height * 0.7, 650),
+        r: 40 // Default bottom curvature radius
+    };
+
+    function updateBoundaries() {
+        if (boundaries.length > 0) {
+            Composite.remove(world, boundaries);
+            boundaries = [];
+        }
+
+        const cx = container.x;
+        const cy = container.y;
+        const w = container.w;
+        const h = container.h;
+        const r = container.r;
+
+        function createExtendedWall(x1, y1, x2, y2, extendTop = false, outwardDirection = -1) {
+            let startX = x1, startY = y1;
+            if (extendTop) {
+                const dx = x2 - x1;
+                const dy = y2 - y1;
+                const factor = 1000 / Math.max(Math.abs(dy), 0.1);
+                startX = x1 - dx * factor;
+                startY = y1 - dy * factor;
+            }
+            let midX = (startX + x2) / 2;
+            let midY = (startY + y2) / 2;
+            const length = Math.hypot(x2 - startX, y2 - startY);
+            const angle = Math.atan2(y2 - startY, x2 - startX);
+            
+            // Shift the physical wall center outward by wallThickness / 2
+            const offsetDist = wallThickness / 2;
+            midX += outwardDirection * Math.sin(angle) * offsetDist;
+            midY -= outwardDirection * Math.cos(angle) * offsetDist;
+
+            return Bodies.rectangle(midX, midY, length, wallThickness, {
+                isStatic: true, label: 'boundary', angle: angle, render: { visible: false }
+            });
+        }
+
+        function createCornerSegments(cornerCX, cornerCY, radius, startAngle, endAngle) {
+            if (radius <= 2) return [];
+            const segments = [];
+            const numSegments = Math.max(5, Math.floor(radius / 5)); 
+            const angleStep = (endAngle - startAngle) / numSegments;
+            for (let i = 0; i < numSegments; i++) {
+                const theta = startAngle + (i + 0.5) * angleStep;
+                const radiusForCenter = radius + wallThickness / 2;
+                const segX = cornerCX + Math.cos(theta) * radiusForCenter;
+                const segY = cornerCY + Math.sin(theta) * radiusForCenter;
+                const segmentLength = (Math.abs(endAngle - startAngle) * radiusForCenter) / numSegments;
+                segments.push(Bodies.rectangle(segX, segY, segmentLength + 5, wallThickness, {
+                    isStatic: true, angle: theta + Math.PI / 2, label: 'boundary', render: { visible: false }
+                }));
+            }
+            return segments;
+        }
+
+        if (containerShape === 'initial') {
+            const leftX = cx - w/2;
+            const rightX = cx + w/2;
+            const bottomY = cy + h/2;
+            
+            const left = Bodies.rectangle(leftX - wallThickness/2, cy - 500, wallThickness, h + 1000, { isStatic: true, label: 'boundary', render: { visible: false } });
+            const right = Bodies.rectangle(rightX + wallThickness/2, cy - 500, wallThickness, h + 1000, { isStatic: true, label: 'boundary', render: { visible: false } });
+            const bottom = Bodies.rectangle(cx, bottomY + wallThickness/2, Math.max(1, w - 2*r), wallThickness, { isStatic: true, label: 'boundary', render: { visible: false } });
+
+            const blSegments = createCornerSegments(leftX + r, bottomY - r, r, Math.PI / 2, Math.PI);
+            const brSegments = createCornerSegments(rightX - r, bottomY - r, r, 0, Math.PI / 2);
+
+            boundaries = [left, right, bottom, ...blSegments, ...brSegments];
+        } else if (containerShape === 'rectangle') {
+            boundaries.push(createExtendedWall(cx - w/2, cy - h/2, cx - w/2, cy + h/2, true, -1));
+            boundaries.push(createExtendedWall(cx + w/2, cy - h/2, cx + w/2, cy + h/2, true, 1));
+            boundaries.push(createExtendedWall(cx - w/2 - wallThickness/2, cy + h/2, cx + w/2 + wallThickness/2, cy + h/2, false, -1));
+        } else if (containerShape === 'trapezoid') {
+            boundaries.push(createExtendedWall(cx - w/2, cy - h/2, cx - w/4, cy + h/2, true, -1));
+            boundaries.push(createExtendedWall(cx + w/2, cy - h/2, cx + w/4, cy + h/2, true, 1));
+            boundaries.push(createExtendedWall(cx - w/4 - wallThickness/2, cy + h/2, cx + w/4 + wallThickness/2, cy + h/2, false, -1));
+        } else if (containerShape === 'triangle_inverted') {
+            boundaries.push(createExtendedWall(cx - w/2, cy - h/2, cx, cy + h/2, true, -1));
+            boundaries.push(createExtendedWall(cx + w/2, cy - h/2, cx, cy + h/2, true, 1));
+            boundaries.push(Bodies.rectangle(cx, cy + h/2 + wallThickness/2, wallThickness, wallThickness, { isStatic: true, label: 'boundary', render: { visible: false } }));
+        } else if (containerShape === 'semicircle') {
+            const r = w/2;
+            const arcY = cy + h/2 - r;
+            boundaries.push(createExtendedWall(cx - r, cy - h/2, cx - r, arcY, true, -1));
+            boundaries.push(createExtendedWall(cx + r, cy - h/2, cx + r, arcY, true, 1));
+            const curveSegments = createCornerSegments(cx, arcY, r, 0, Math.PI);
+            boundaries.push(...curveSegments);
+        } else if (containerShape === 'custom' && drawnPoints.length > 1) {
+            for (let i = 0; i < drawnPoints.length - 1; i++) {
+                const p1 = drawnPoints[i];
+                const p2 = drawnPoints[i+1];
+                const dx = p2.x - p1.x;
+                const dy = p2.y - p1.y;
+                const dist = Math.hypot(dx, dy);
+                const angle = Math.atan2(dy, dx);
+                const midX = p1.x + dx/2;
+                const midY = p1.y + dy/2;
+                
+                // Add overlapping circles at joints for perfectly smooth physics sliding
+                boundaries.push(Bodies.circle(p1.x, p1.y, customWallThickness/2, {
+                    isStatic: true, label: 'boundary', render: { visible: false }
+                }));
+
+                boundaries.push(Bodies.rectangle(midX, midY, dist, customWallThickness, {
+                    isStatic: true, label: 'boundary', angle: angle, render: { visible: false }
+                }));
+            }
+            const lastP = drawnPoints[drawnPoints.length-1];
+            boundaries.push(Bodies.circle(lastP.x, lastP.y, customWallThickness/2, {
+                isStatic: true, label: 'boundary', render: { visible: false }
+            }));
+        }
+
+        boundaries.forEach(b => {
+            b.collisionFilter.category = boundaryCategory;
+        });
+        Composite.add(world, boundaries);
+    }
+
+    // --- Text Processing & Body Creation ---
+    // Hidden canvas context for accurate text measurement
+    const measureCtx = document.createElement('canvas').getContext('2d');
+    const fontSize = Math.min(Math.max(window.innerWidth * 0.04, 28), 56); // Responsive font size, slightly larger
+    measureCtx.font = `500 ${fontSize}px "MiSans", sans-serif`;
+
+    function generateTypography() {
+        const textStr = document.getElementById('text-input').value;
+        const words = textStr.toLowerCase().replace(/[\n\r]/g, ' ').split(' ').filter(w => w.trim() !== '');
+        
+        if (words.length === 0) return;
+
+        // Clear any ongoing drop sequence
+        if (dropInterval) {
+            clearInterval(dropInterval);
+            dropInterval = null;
+        }
+
+        // Clear existing bodies
+        Composite.remove(world, textBodies);
+        Composite.remove(world, dotBodies);
+        textBodies = [];
+        dotBodies = [];
+
+        const startY = (container.y - container.h/2) - 100;
+        const cx = width / 2;
+        const bounce = parseFloat(document.getElementById('slider-bounce').value);
+
+        // Create Text Pills
+        words.forEach((word, index) => {
+            const metrics = measureCtx.measureText(word);
+            const textWidth = metrics.width;
+            const paddingX = 30;
+            const paddingY = 20;
+            const bodyWidth = textWidth + paddingX;
+            const bodyHeight = fontSize + paddingY;
+
+            const offsetX = (Math.random() - 0.5) * 200;
+            const spawnY = startY - 50; // Spawn at a fixed height, time handles the stagger
+
+            const body = Bodies.rectangle(cx + offsetX, spawnY, bodyWidth, bodyHeight, {
+                restitution: bounce,
+                friction: 0.1,
+                density: 0.005,
+                chamfer: textPillRadiusRatio > 0 ? { radius: bodyHeight * textPillRadiusRatio } : null,
+                label: 'word',
+                plugin: {
+                    text: word,
+                    width: bodyWidth,
+                    height: bodyHeight
+                }
+            });
+
+            // Initial random rotation
+            Body.setAngle(body, (Math.random() - 0.5) * 0.5);
+            Body.setVelocity(body, { x: (Math.random() - 0.5) * 2, y: Math.random() * 2 });
+
+            textBodies.push(body);
+        });
+
+        // Create Decorative Elements
+        const dotCount = Math.min(words.length * 2, 25);
+        for (let i = 0; i < dotCount; i++) {
+            const radius = Math.random() * 15 + 20;
+            const offsetX = (Math.random() - 0.5) * 300;
+            const spawnY = startY - 50;
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            
+            const type = activeDecorations[Math.floor(Math.random() * activeDecorations.length)];
+            let decoBody;
+            const commonOptions = {
+                restitution: bounce + 0.2,
+                friction: 0.1,
+                density: 0.002,
+                label: 'deco',
+                plugin: { type: type, color: color, radius: radius }
+            };
+
+            if (type === 'square') {
+                decoBody = Bodies.rectangle(cx + offsetX, spawnY, radius * 1.8, radius * 1.8, commonOptions);
+            } else if (type === 'triangle') {
+                decoBody = Bodies.polygon(cx + offsetX, spawnY, 3, radius * 1.2, commonOptions);
+            } else if (type === 'pentagon') {
+                decoBody = Bodies.polygon(cx + offsetX, spawnY, 5, radius, commonOptions);
+            } else if (type === 'hexagon') {
+                decoBody = Bodies.polygon(cx + offsetX, spawnY, 6, radius, commonOptions);
+            } else if (type === 'nonagon') {
+                decoBody = Bodies.polygon(cx + offsetX, spawnY, 9, radius, commonOptions);
+            } else if (type === 'emoji') {
+                decoBody = Bodies.circle(cx + offsetX, spawnY, radius, {
+                    ...commonOptions,
+                    plugin: { ...commonOptions.plugin, emoji: emojisList[Math.floor(Math.random() * emojisList.length)] }
+                });
+            } else {
+                decoBody = Bodies.circle(cx + offsetX, spawnY, radius, commonOptions);
+            }
+            
+            // Random initial rotation for shapes
+            if (type !== 'circle' && type !== 'emoji') {
+                Body.setAngle(decoBody, Math.random() * Math.PI * 2);
+            }
+
+            dotBodies.push(decoBody);
+        }
+
+        // Queue elements to add sequentially
+        const allNewElements = [];
+        let dotIndex = 0;
+        
+        // Interleave text and dots for a better visual effect
+        for (let i = 0; i < textBodies.length; i++) {
+            allNewElements.push(textBodies[i]);
+            // Drop 1-2 dots after each word
+            if (dotIndex < dotBodies.length) allNewElements.push(dotBodies[dotIndex++]);
+            if (dotIndex < dotBodies.length && Math.random() > 0.5) allNewElements.push(dotBodies[dotIndex++]);
+        }
+        // Add any remaining dots
+        while (dotIndex < dotBodies.length) {
+            allNewElements.push(dotBodies[dotIndex++]);
+        }
+
+        let currentIndex = 0;
+        dropInterval = setInterval(() => {
+            if (currentIndex >= allNewElements.length) {
+                clearInterval(dropInterval);
+                dropInterval = null;
+                return;
+            }
+            Composite.add(world, allNewElements[currentIndex]);
+            currentIndex++;
+        }, 150); // 150ms interval between each drop
+    }
+
+    // --- Mouse Interaction ---
+    const mouse = Mouse.create(canvas);
+    const mouseConstraint = MouseConstraint.create(engine, {
+        mouse: mouse,
+        constraint: {
+            stiffness: 0.2,
+            render: { visible: false }
+        }
+    });
+    mouseConstraint.collisionFilter.mask = 1;
+    Composite.add(world, mouseConstraint);
+    
+    // Keep mouse in sync with pixel ratio/scaling if needed
+    mouse.element.removeEventListener("mousewheel", mouse.mousewheel);
+    mouse.element.removeEventListener("DOMMouseScroll", mouse.mousewheel);
+
+    // --- Handle Interaction ---
+    let activeHandle = null;
+    let startContainerState = null;
+    let startMouse = null;
+
+    canvas.addEventListener('pointerdown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+
+        if (isDrawingMode) {
+            isDrawingActive = true;
+            drawnPoints = [{x: mx, y: my}];
+            mouseConstraint.collisionFilter.mask = 0; // Disable body grabbing while drawing
+            return;
+        }
+
+        if (typeof getHandles === 'function' && containerShape !== 'custom') {
+            const handles = getHandles();
+            for (let h of handles) {
+                let hx = h.x, hy = h.y;
+
+                if (Math.hypot(mx - hx, my - hy) < 30) {
+                    activeHandle = h.id;
+                    startContainerState = { ...container };
+                    startMouse = { x: e.clientX, y: e.clientY };
+                    // Temporarily disable matter.js body grabbing while resizing
+                    mouseConstraint.collisionFilter.mask = 0; 
+                    e.stopPropagation();
+                    return;
+                }
+            }
+        }
+    });
+
+    window.addEventListener('pointermove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+
+        if (isDrawingActive) {
+            const lastPt = drawnPoints[drawnPoints.length - 1];
+            if (Math.hypot(mx - lastPt.x, my - lastPt.y) > 10) {
+                drawnPoints.push({x: mx, y: my});
+            }
+            return;
+        }
+
+        if (!activeHandle) {
+            // Hover effect for handles
+            let hovered = false;
+            if (typeof getHandles === 'function' && containerShape !== 'custom') {
+                for (let h of getHandles()) {
+                    let hx = h.x, hy = h.y;
+                    if (Math.hypot(mx - hx, my - hy) < 30) {
+                        canvas.style.cursor = h.cursor;
+                        hovered = true;
+                        break;
+                    }
+                }
+            }
+            if (!hovered) canvas.style.cursor = 'default';
+            return;
+        }
+
+        const dx = e.clientX - startMouse.x;
+        const dy = e.clientY - startMouse.y;
+
+        if (activeHandle === 'tl') {
+            container.w = Math.max(150, startContainerState.w - dx * 2);
+            container.h = Math.max(150, startContainerState.h - dy * 2);
+        } else if (activeHandle === 'tr') {
+            container.w = Math.max(150, startContainerState.w + dx * 2);
+            container.h = Math.max(150, startContainerState.h - dy * 2);
+        } else if (activeHandle === 'bl') {
+            container.w = Math.max(150, startContainerState.w - dx * 2);
+            container.h = Math.max(150, startContainerState.h + dy * 2);
+        } else if (activeHandle === 'br') {
+            container.w = Math.max(150, startContainerState.w + dx * 2);
+            container.h = Math.max(150, startContainerState.h + dy * 2);
+        } else if (activeHandle === 'curve') {
+            // Relative drag: drag up (negative dy) increases radius, drag down (positive dy) decreases radius
+            let newR = startContainerState.r - dy;
+            container.r = Math.max(2, Math.min(container.w / 2, container.h / 2, newR));
+        }
+        
+        // Always ensure radius doesn't exceed the container's half-dimensions to prevent physics errors
+        container.r = Math.max(2, Math.min(container.r, container.w / 2, container.h / 2));
+
+        updateBoundaries();
+        // Wake up bodies so they react to the new walls
+        Composite.allBodies(world).forEach(b => Body.setAwake(b, true));
+    });
+
+    window.addEventListener('pointerup', () => {
+        if (isDrawingActive) {
+            isDrawingActive = false;
+            isDrawingMode = false;
+            document.getElementById('draw-overlay').classList.add('hidden');
+            document.getElementById('btn-draw').classList.remove('bg-[#ff3b30]', 'text-[#fdfcfc]', 'border-[#ff3b30]');
+            document.getElementById('btn-draw').classList.add('border-[#201d1d]/12', 'text-[#201d1d]');
+            
+            if (drawnPoints.length > 5) {
+                containerShape = 'custom';
+                document.getElementById('select-shape').value = 'custom';
+                updateBoundaries();
+                Composite.allBodies(world).forEach(b => Body.setAwake(b, true));
+            } else {
+                // If draw is too short, revert
+                drawnPoints = [];
+                if (containerShape === 'custom') {
+                    containerShape = 'initial';
+                    document.getElementById('select-shape').value = 'initial';
+                    updateBoundaries();
+                }
+            }
+            mouseConstraint.collisionFilter.mask = 1;
+            canvas.style.cursor = 'default';
+            return;
+        }
+
+        if (activeHandle) {
+            activeHandle = null;
+            mouseConstraint.collisionFilter.mask = 1; // Re-enable body grabbing
+            canvas.style.cursor = 'default';
+        }
+    });
+
+    function getHandles() {
+        if (containerShape === 'custom') return [];
+        const hw = container.w / 2;
+        const hh = container.h / 2;
+        const handles = [
+            { id: 'tl', x: container.x - hw, y: container.y - hh, cursor: 'nwse-resize' },
+            { id: 'tr', x: container.x + hw, y: container.y - hh, cursor: 'nesw-resize' },
+            { id: 'bl', x: container.x - hw, y: container.y + hh, cursor: 'nesw-resize' },
+            { id: 'br', x: container.x + hw, y: container.y + hh, cursor: 'nwse-resize' }
+        ];
+        if (containerShape === 'initial') {
+            handles.push({ id: 'curve', x: container.x, y: container.y + hh + 40, cursor: 'ns-resize' });
+        }
+        return handles;
+    }
+
+    function drawHandles() {
+        const handles = getHandles();
+        ctx.lineWidth = 2;
+        handles.forEach(h => {
+            ctx.fillStyle = '#fdfcfc';
+            ctx.strokeStyle = containerColor;
+            if (h.id === 'curve') {
+                // Connecting line from bottom edge to anchor
+                const bottomEdgeY = container.y + container.h / 2;
+                ctx.beginPath();
+                ctx.moveTo(h.x, bottomEdgeY);
+                ctx.lineTo(h.x, h.y - 8);
+                ctx.stroke();
+
+                // Curvature handle - draw as a square with a small '+' inside
+                ctx.beginPath();
+                ctx.rect(h.x - 8, h.y - 8, 16, 16);
+                ctx.fill();
+                ctx.stroke();
+                
+                // Plus sign inside
+                ctx.fillStyle = containerColor;
+                ctx.fillRect(h.x - 4, h.y - 1, 8, 2);
+                ctx.fillRect(h.x - 1, h.y - 4, 2, 8);
+            } else {
+                // Corner resize handles - draw as a square
+                ctx.beginPath();
+                ctx.rect(h.x - 6, h.y - 6, 12, 12);
+                ctx.fill();
+                ctx.stroke();
+            }
+        });
+    }
+
+    // --- Custom Render Loop ---
+    function drawBlobContainer() {
+        if (containerShape === 'custom') {
+            if (drawnPoints.length > 1) {
+                ctx.beginPath();
+                ctx.moveTo(drawnPoints[0].x, drawnPoints[0].y);
+                for (let i = 1; i < drawnPoints.length; i++) {
+                    ctx.lineTo(drawnPoints[i].x, drawnPoints[i].y);
+                }
+                ctx.strokeStyle = containerColor;
+                ctx.lineWidth = customWallThickness;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.stroke();
+            }
+            return; // Skip handles and filling
+        }
+
+        if (!container.w) return;
+        
+        ctx.fillStyle = containerColor;
+        ctx.beginPath();
+        
+        const cx = container.x;
+        const cy = container.y;
+        const w = container.w;
+        const h = container.h;
+        const r = container.r;
+
+        if (containerShape === 'initial') {
+            const x = cx - w/2;
+            const y = cy - h/2;
+            ctx.moveTo(x, y);
+            ctx.lineTo(x + w, y);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+            ctx.lineTo(x + r, y + h);
+            ctx.arcTo(x, y + h, x, y + h - r, r);
+            ctx.closePath();
+        } else if (containerShape === 'rectangle') {
+            ctx.rect(cx - w/2, cy - h/2, w, h);
+        } else if (containerShape === 'trapezoid') {
+            ctx.moveTo(cx - w/2, cy - h/2);
+            ctx.lineTo(cx + w/2, cy - h/2);
+            ctx.lineTo(cx + w/4, cy + h/2);
+            ctx.lineTo(cx - w/4, cy + h/2);
+            ctx.closePath();
+        } else if (containerShape === 'triangle_inverted') {
+            ctx.moveTo(cx - w/2, cy - h/2);
+            ctx.lineTo(cx + w/2, cy - h/2);
+            ctx.lineTo(cx, cy + h/2);
+            ctx.closePath();
+        } else if (containerShape === 'semicircle') {
+            const arcR = w/2;
+            const arcY = cy + h/2 - arcR;
+            ctx.moveTo(cx - arcR, cy - h/2);
+            ctx.lineTo(cx + arcR, cy - h/2);
+            ctx.lineTo(cx + arcR, arcY);
+            ctx.arc(cx, arcY, arcR, 0, Math.PI);
+            ctx.lineTo(cx - arcR, arcY);
+            ctx.closePath();
+        }
+        
+        ctx.fill();
+
+        // Draw interactive handles
+        drawHandles();
+    }
+
+    function render() {
+        // Clear background (allow CSS background grid to show through)
+        ctx.clearRect(0, 0, width, height);
+
+        // Draw Visual Container
+        drawBlobContainer();
+
+        // Draw active drawing line preview
+        if (isDrawingActive && drawnPoints.length > 1) {
+            ctx.beginPath();
+            ctx.moveTo(drawnPoints[0].x, drawnPoints[0].y);
+            for (let i = 1; i < drawnPoints.length; i++) {
+                ctx.lineTo(drawnPoints[i].x, drawnPoints[i].y);
+            }
+            ctx.strokeStyle = containerColor;
+            ctx.lineWidth = customWallThickness;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.save();
+            ctx.globalAlpha = 0.6;
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        const bodies = Composite.allBodies(world);
+
+        for (let i = 0; i < bodies.length; i++) {
+            const body = bodies[i];
+
+            if (body.label === 'boundary') continue;
+
+            if (body.label === 'word') {
+                ctx.save();
+                ctx.translate(body.position.x, body.position.y);
+                ctx.rotate(body.angle);
+                
+                const w = body.plugin.width;
+                const h = body.plugin.height;
+                const text = body.plugin.text;
+
+                // Draw Pill Background & Outline
+                ctx.fillStyle = textPillBgColor;
+                
+                const hex = textPillBgColor.replace('#', '');
+                let brightness = 255;
+                if (hex.length === 6) {
+                    const r = parseInt(hex.substr(0, 2), 16);
+                    const g = parseInt(hex.substr(2, 2), 16);
+                    const b = parseInt(hex.substr(4, 2), 16);
+                    brightness = (r * 299 + g * 587 + b * 114) / 1000;
+                }
+                const strokeColor = brightness > 125 ? 'rgba(32, 29, 29, 0.12)' : 'rgba(253, 252, 252, 0.2)';
+                
+                ctx.strokeStyle = strokeColor;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.roundRect(-w / 2, -h / 2, w, h, h * textPillRadiusRatio);
+                ctx.fill();
+                ctx.stroke();
+
+                // Draw Text
+                ctx.fillStyle = textFontColor;
+                ctx.font = `500 ${fontSize}px "MiSans", sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                // slight y adjustment for font baseline
+                ctx.fillText(text, 0, 2); 
+                ctx.restore();
+
+            } else if (body.label === 'deco') {
+                if (body.plugin.type === 'emoji') {
+                    ctx.save();
+                    ctx.translate(body.position.x, body.position.y);
+                    ctx.rotate(body.angle);
+                    ctx.font = `${body.plugin.radius * 1.5}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(body.plugin.emoji, 0, 2);
+                    ctx.restore();
+                } else {
+                    // Draw polygons using absolute physical vertices for perfect accuracy
+                    ctx.save();
+                    ctx.fillStyle = body.plugin.color;
+                    ctx.beginPath();
+                    ctx.moveTo(body.vertices[0].x, body.vertices[0].y);
+                    for (let j = 1; j < body.vertices.length; j++) {
+                        ctx.lineTo(body.vertices[j].x, body.vertices[j].y);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+            
+            // Constrain bodies loosely to keep them from flying completely off screen
+            // if chaos pushes them too hard
+            if (body.position.y > height + 200) {
+                Body.setPosition(body, { x: width/2, y: -100 });
+                Body.setVelocity(body, { x: 0, y: 0 });
+            }
+        }
+
+        requestAnimationFrame(render);
+    }
+
+    // --- Runner ---
+    const runner = Runner.create();
+    Runner.run(runner, engine);
+
+    // --- Init ---
+    updateBoundaries();
+    generateTypography();
+    render();
+
+    // --- UI Listeners ---
+    document.getElementById('btn-generate').addEventListener('click', generateTypography);
+
+    document.getElementById('slider-gravity').addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        engine.gravity.y = val;
+        document.getElementById('val-gravity').innerText = val.toFixed(1);
+        
+        // Wake up bodies if gravity changes
+        Composite.allBodies(world).forEach(b => Body.setAwake(b, true));
+    });
+
+    document.getElementById('slider-bounce').addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        document.getElementById('val-bounce').innerText = val.toFixed(1);
+        
+        [...textBodies, ...dotBodies].forEach(b => {
+            b.restitution = val;
+        });
+    });
+
+    document.getElementById('slider-radius').addEventListener('input', (e) => {
+        const val = parseInt(e.target.value);
+        textPillRadiusRatio = val / 200;
+        document.getElementById('val-radius').innerText = val === 0 ? '0%' : (val === 100 ? 'Pill' : `${val}%`);
+    });
+
+    document.getElementById('slider-radius').addEventListener('change', () => {
+        generateTypography();
+    });
+
+    document.getElementById('select-shape').addEventListener('change', (e) => {
+        containerShape = e.target.value;
+        if (containerShape === 'custom' && drawnPoints.length === 0) {
+            // Force into draw mode if they select custom but haven't drawn yet
+            document.getElementById('btn-draw').click();
+            return;
+        }
+        
+        // If they select a non-custom shape, turn off draw mode
+        if (containerShape !== 'custom') {
+            isDrawingMode = false;
+            canvas.style.cursor = 'default';
+            document.getElementById('draw-overlay').classList.add('hidden');
+            document.getElementById('btn-draw').classList.remove('bg-[#ff3b30]', 'text-[#fdfcfc]', 'border-[#ff3b30]');
+            document.getElementById('btn-draw').classList.add('border-[#201d1d]/12', 'text-[#201d1d]');
+            mouseConstraint.collisionFilter.mask = 1;
+        }
+
+        updateBoundaries();
+        
+        // Wake up bodies so they adapt to new boundaries immediately
+        Composite.allBodies(world).forEach(b => Body.setAwake(b, true));
+    });
+
+    document.getElementById('btn-draw').addEventListener('click', () => {
+        isDrawingMode = true;
+        canvas.style.cursor = 'crosshair';
+        document.getElementById('draw-overlay').classList.remove('hidden');
+        document.getElementById('btn-draw').classList.remove('border-[#201d1d]/12', 'text-[#201d1d]');
+        document.getElementById('btn-draw').classList.add('bg-[#ff3b30]', 'text-[#fdfcfc]', 'border-[#ff3b30]');
+    });
+
+    document.getElementById('color-text-pill').addEventListener('input', (e) => {
+        textPillBgColor = e.target.value;
+        // Auto-adjust text font color based on background brightness
+        const hex = textPillBgColor.replace('#', '');
+        if (hex.length === 6) {
+            const r = parseInt(hex.substr(0, 2), 16);
+            const g = parseInt(hex.substr(2, 2), 16);
+            const b = parseInt(hex.substr(4, 2), 16);
+            const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+            textFontColor = brightness > 125 ? '#201d1d' : '#fdfcfc';
+        }
+    });
+
+    document.getElementById('color-container').addEventListener('input', (e) => {
+        containerColor = e.target.value;
+    });
+
+    document.getElementById('color-bg').addEventListener('input', (e) => {
+        document.documentElement.style.setProperty('--bg-color', e.target.value);
+    });
+
+    // Decorations UI logic
+    document.querySelectorAll('.dec-toggle').forEach(btn => {
+        const type = btn.getAttribute('data-type');
+        const displayName = type.charAt(0).toUpperCase() + type.slice(1);
+        if (activeDecorations.includes(type)) {
+            btn.innerText = `[x] ${displayName}`;
+            btn.classList.add('bg-[#201d1d]', 'text-[#fdfcfc]', 'border-[#201d1d]');
+            btn.classList.remove('bg-transparent', 'text-[#646262]', 'border-[#201d1d]/12');
+        } else {
+            btn.innerText = `[ ] ${displayName}`;
+            btn.classList.remove('bg-[#201d1d]', 'text-[#fdfcfc]', 'border-[#201d1d]');
+            btn.classList.add('bg-transparent', 'text-[#646262]', 'border-[#201d1d]/12');
+        }
+
+        btn.addEventListener('click', (e) => {
+            const type = btn.getAttribute('data-type');
+            const displayName = type.charAt(0).toUpperCase() + type.slice(1);
+            if (activeDecorations.includes(type)) {
+                if (activeDecorations.length > 1) { // Prevent unselecting all
+                    activeDecorations = activeDecorations.filter(t => t !== type);
+                    btn.innerText = `[ ] ${displayName}`;
+                    btn.classList.remove('bg-[#201d1d]', 'text-[#fdfcfc]', 'border-[#201d1d]');
+                    btn.classList.add('bg-transparent', 'text-[#646262]', 'border-[#201d1d]/12');
+                }
+            } else {
+                activeDecorations.push(type);
+                btn.innerText = `[x] ${displayName}`;
+                btn.classList.add('bg-[#201d1d]', 'text-[#fdfcfc]', 'border-[#201d1d]');
+                btn.classList.remove('bg-transparent', 'text-[#646262]', 'border-[#201d1d]/12');
+            }
+        });
+    });
+
+    // UI Panel Minimize Toggle
+    const btnMinimize = document.getElementById('btn-minimize');
+    btnMinimize.addEventListener('click', () => {
+        isMinimized = !isMinimized;
+        const panel = document.getElementById('ui-panel');
+        panel.classList.toggle('minimized', isMinimized);
+        btnMinimize.innerText = isMinimized ? '[+]' : '[−]';
+    });
+
+    // Mobile UI Toggle
+    const uiPanel = document.getElementById('ui-panel');
+    const mobileToggle = document.getElementById('mobile-toggle');
+    mobileToggle.addEventListener('click', () => {
+        uiPanel.classList.toggle('expanded');
+    });
+
+    // Resize Handler
+    window.addEventListener('resize', () => {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+        
+        // Update font size based on screen width
+        const newFontSize = Math.min(Math.max(window.innerWidth * 0.04, 28), 56);
+        measureCtx.font = `500 ${newFontSize}px "MiSans", sans-serif`;
+
+        container.x = width / 2;
+        container.y = height / 2 + 50;
+        updateBoundaries();
+        // Slightly nudge bodies to wake them up on resize
+        Composite.allBodies(world).forEach(b => Body.setAwake(b, true));
+    });
+
+    // Add polyfill for roundRect if needed (older browsers)
+    if (!CanvasRenderingContext2D.prototype.roundRect) {
+        CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+            if (w < 2 * r) r = w / 2;
+            if (h < 2 * r) r = h / 2;
+            this.beginPath();
+            this.moveTo(x + r, y);
+            this.arcTo(x + w, y, x + w, y + h, r);
+            this.arcTo(x + w, y + h, x, y + h, r);
+            this.arcTo(x, y + h, x, y, r);
+            this.arcTo(x, y, x + w, y, r);
+            this.closePath();
+            return this;
+        }
+    }
+
+</script>
+</body>
+</html>
