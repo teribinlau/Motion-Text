@@ -357,13 +357,7 @@
 
     // --- Container State & Boundaries ---
     let containerShape = 'initial';
-    let container = {
-        x: width / 2,
-        y: height / 2 + 50,
-        w: Math.min(width * 0.85, 450),
-        h: Math.min(height * 0.7, 650),
-        r: 40 // Default bottom curvature radius
-    };
+    let container = { r: 40 };
 
     function updateBoundaries() {
         if (boundaries.length > 0) {
@@ -486,8 +480,7 @@
     // --- Text Processing & Body Creation ---
     // Hidden canvas context for accurate text measurement
     const measureCtx = document.createElement('canvas').getContext('2d');
-    const fontSize = Math.min(Math.max(window.innerWidth * 0.04, 28), 56); // Responsive font size, slightly larger
-    measureCtx.font = `500 ${fontSize}px "MiSans", sans-serif`;
+    let fontSize = 28;
 
     function generateTypography() {
         const textStr = document.getElementById('text-input').value;
@@ -984,11 +977,36 @@
         requestAnimationFrame(render);
     }
 
+    function adjustLayout() {
+        if (width > 768) {
+            // Desktop Layout: Shift container to the center of the remaining space next to sidebar (360px)
+            const sidebarWidth = 360;
+            container.x = sidebarWidth + (width - sidebarWidth) / 2;
+            container.y = height / 2;
+            container.w = Math.min((width - sidebarWidth) * 0.8, 450);
+            container.h = Math.min(height * 0.65, 550);
+        } else {
+            // Mobile Layout: Center container and push upwards to prevent overlap with bottom configuration drawer
+            container.x = width / 2;
+            container.y = height * 0.32;
+            container.w = Math.min(width * 0.85, 340);
+            container.h = Math.min(height * 0.42, 320);
+        }
+        
+        // Ensure rounding radius is within bounds
+        container.r = Math.max(2, Math.min(container.r || 40, container.w / 2, container.h / 2));
+
+        // Update font size dynamically to fit container width nicely
+        fontSize = Math.min(Math.max(width * 0.045, 20), 48);
+        measureCtx.font = `500 ${fontSize}px "MiSans", sans-serif`;
+    }
+
     // --- Runner ---
     const runner = Runner.create();
     Runner.run(runner, engine);
 
     // --- Init ---
+    adjustLayout();
     updateBoundaries();
     generateTypography();
     render();
@@ -1133,12 +1151,7 @@
         canvas.width = width;
         canvas.height = height;
         
-        // Update font size based on screen width
-        const newFontSize = Math.min(Math.max(window.innerWidth * 0.04, 28), 56);
-        measureCtx.font = `500 ${newFontSize}px "MiSans", sans-serif`;
-
-        container.x = width / 2;
-        container.y = height / 2 + 50;
+        adjustLayout();
         updateBoundaries();
         // Slightly nudge bodies to wake them up on resize
         Composite.allBodies(world).forEach(b => Body.setAwake(b, true));
