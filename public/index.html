@@ -199,9 +199,24 @@
 
     <div id="canvas-container">
         <canvas id="world"></canvas>
-        <div id="draw-overlay" class="absolute inset-0 pointer-events-none hidden flex-col items-center justify-start pt-20 z-20">
-            <div class="bg-[#ff3b30] text-[#fdfcfc] px-6 py-3 rounded-[4px] border border-[#fdfcfc] font-bold text-xs tracking-wider">
-                [ DRAW MODE ACTIVE ] - DRAW YOUR CONTAINER ON THE SCREEN
+        <div id="draw-overlay" class="absolute inset-0 pointer-events-none hidden flex-col items-center justify-start pt-6 z-20 gap-3">
+            <div class="bg-[#ff3b30] text-[#fdfcfc] px-6 py-2 rounded-[4px] border border-[#fdfcfc] font-bold text-xs tracking-wider pointer-events-none">
+                [ DRAW MODE ] DRAW MULTIPLE STROKES — CHANGE BRUSH BELOW
+            </div>
+            <div class="bg-[#fdfcfc] border border-[#201d1d] rounded-[4px] px-3 py-2 flex flex-wrap items-center justify-center gap-3 pointer-events-auto max-w-[calc(100vw-32px)]">
+                <div class="flex flex-col gap-1">
+                    <span class="text-[10px] text-[#646262] font-semibold tracking-wider">Brush</span>
+                    <input type="color" id="brush-color" value="#201d1d" class="w-10 h-7 rounded-[4px] cursor-pointer bg-[#f8f7f7] border border-[#201d1d]/12 p-0.5 outline-none focus:border-[#201d1d]">
+                </div>
+                <div class="flex flex-col gap-1 min-w-[140px]">
+                    <div class="flex justify-between text-[10px] text-[#646262] font-semibold tracking-wider">
+                        <span>Thickness</span>
+                        <span id="brush-thickness-val">40</span>
+                    </div>
+                    <input type="range" id="brush-thickness" min="6" max="80" step="2" value="40">
+                </div>
+                <button id="btn-clear-strokes" class="text-xs font-bold px-3 py-2 rounded-[4px] border border-[#201d1d]/12 text-[#201d1d] hover:bg-[#201d1d] hover:text-[#fdfcfc] hover:border-[#201d1d] transition-colors">Clear</button>
+                <button id="btn-done-drawing" class="text-xs font-bold px-3 py-2 rounded-[4px] bg-[#201d1d] text-[#fdfcfc] hover:bg-[#0f0000] transition-colors">Done</button>
             </div>
         </div>
     </div>
@@ -500,8 +515,10 @@
     let isDrawingMode = false;
     let isDrawingActive = false;
     let isMinimized = false;
-    let drawnPoints = [];
-    const customWallThickness = 40;
+    // Each stroke: { points: [{x,y}], thickness, color }
+    let drawnStrokes = [];
+    let currentBrushColor = '#201d1d';
+    let currentBrushThickness = 40;
 
     // --- Container State & Boundaries ---
     let containerShape = 'initial';
@@ -593,30 +610,35 @@
             boundaries.push(createExtendedWall(cx + r, cy - h/2, cx + r, arcY, true, 1));
             const curveSegments = createCornerSegments(cx, arcY, r, 0, Math.PI);
             boundaries.push(...curveSegments);
-        } else if (containerShape === 'custom' && drawnPoints.length > 1) {
-            for (let i = 0; i < drawnPoints.length - 1; i++) {
-                const p1 = drawnPoints[i];
-                const p2 = drawnPoints[i+1];
-                const dx = p2.x - p1.x;
-                const dy = p2.y - p1.y;
-                const dist = Math.hypot(dx, dy);
-                const angle = Math.atan2(dy, dx);
-                const midX = p1.x + dx/2;
-                const midY = p1.y + dy/2;
-                
-                // Add overlapping circles at joints for perfectly smooth physics sliding
-                boundaries.push(Bodies.circle(p1.x, p1.y, customWallThickness/2, {
+        } else if (containerShape === 'custom' && drawnStrokes.length > 0) {
+            drawnStrokes.forEach(stroke => {
+                const points = stroke.points;
+                if (points.length < 2) return;
+                const thickness = stroke.thickness;
+                for (let i = 0; i < points.length - 1; i++) {
+                    const p1 = points[i];
+                    const p2 = points[i+1];
+                    const dx = p2.x - p1.x;
+                    const dy = p2.y - p1.y;
+                    const dist = Math.hypot(dx, dy);
+                    const angle = Math.atan2(dy, dx);
+                    const midX = p1.x + dx/2;
+                    const midY = p1.y + dy/2;
+
+                    // Overlapping circles at joints keep physics sliding smooth between segments
+                    boundaries.push(Bodies.circle(p1.x, p1.y, thickness/2, {
+                        isStatic: true, label: 'boundary', render: { visible: false }
+                    }));
+
+                    boundaries.push(Bodies.rectangle(midX, midY, dist, thickness, {
+                        isStatic: true, label: 'boundary', angle: angle, render: { visible: false }
+                    }));
+                }
+                const lastP = points[points.length-1];
+                boundaries.push(Bodies.circle(lastP.x, lastP.y, thickness/2, {
                     isStatic: true, label: 'boundary', render: { visible: false }
                 }));
-
-                boundaries.push(Bodies.rectangle(midX, midY, dist, customWallThickness, {
-                    isStatic: true, label: 'boundary', angle: angle, render: { visible: false }
-                }));
-            }
-            const lastP = drawnPoints[drawnPoints.length-1];
-            boundaries.push(Bodies.circle(lastP.x, lastP.y, customWallThickness/2, {
-                isStatic: true, label: 'boundary', render: { visible: false }
-            }));
+            });
         }
 
         boundaries.forEach(b => {
@@ -725,6 +747,8 @@
             if (type !== 'circle' && type !== 'emoji') {
                 Body.setAngle(decoBody, Math.random() * Math.PI * 2);
             }
+            // Match the text pill initial velocity so every dropped item starts with the same downward kick
+            Body.setVelocity(decoBody, { x: (Math.random() - 0.5) * 2, y: Math.random() * 2 });
 
             dotBodies.push(decoBody);
         }
@@ -785,7 +809,11 @@
 
         if (isDrawingMode) {
             isDrawingActive = true;
-            drawnPoints = [{x: mx, y: my}];
+            drawnStrokes.push({
+                points: [{x: mx, y: my}],
+                thickness: currentBrushThickness,
+                color: currentBrushColor
+            });
             mouseConstraint.collisionFilter.mask = 0; // Disable body grabbing while drawing
             return;
         }
@@ -813,10 +841,11 @@
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
 
-        if (isDrawingActive) {
-            const lastPt = drawnPoints[drawnPoints.length - 1];
+        if (isDrawingActive && drawnStrokes.length > 0) {
+            const currentStroke = drawnStrokes[drawnStrokes.length - 1];
+            const lastPt = currentStroke.points[currentStroke.points.length - 1];
             if (Math.hypot(mx - lastPt.x, my - lastPt.y) > 10) {
-                drawnPoints.push({x: mx, y: my});
+                currentStroke.points.push({x: mx, y: my});
             }
             return;
         }
@@ -870,27 +899,19 @@
     window.addEventListener('pointerup', () => {
         if (isDrawingActive) {
             isDrawingActive = false;
-            isDrawingMode = false;
-            document.getElementById('draw-overlay').classList.add('hidden');
-            document.getElementById('btn-draw').classList.remove('bg-[#ff3b30]', 'text-[#fdfcfc]', 'border-[#ff3b30]');
-            document.getElementById('btn-draw').classList.add('border-[#201d1d]/12', 'text-[#201d1d]');
-            
-            if (drawnPoints.length > 5) {
+            // Drop the just-finished stroke if it's too short to be useful
+            if (drawnStrokes.length > 0 && drawnStrokes[drawnStrokes.length - 1].points.length < 2) {
+                drawnStrokes.pop();
+            }
+            // Apply strokes as physics boundaries right away so the user gets live feedback while drawing more
+            if (drawnStrokes.length > 0) {
                 containerShape = 'custom';
                 document.getElementById('select-shape').value = 'custom';
                 updateBoundaries();
                 Composite.allBodies(world).forEach(b => Body.setAwake(b, true));
-            } else {
-                // If draw is too short, revert
-                drawnPoints = [];
-                if (containerShape === 'custom') {
-                    containerShape = 'initial';
-                    document.getElementById('select-shape').value = 'initial';
-                    updateBoundaries();
-                }
             }
-            mouseConstraint.collisionFilter.mask = 1;
-            canvas.style.cursor = 'default';
+            // Stay in draw mode — the user explicitly clicks Done to leave
+            canvas.style.cursor = 'crosshair';
             return;
         }
 
@@ -952,20 +973,34 @@
     }
 
     // --- Custom Render Loop ---
-    function drawBlobContainer() {
-        if (containerShape === 'custom') {
-            if (drawnPoints.length > 1) {
-                ctx.beginPath();
-                ctx.moveTo(drawnPoints[0].x, drawnPoints[0].y);
-                for (let i = 1; i < drawnPoints.length; i++) {
-                    ctx.lineTo(drawnPoints[i].x, drawnPoints[i].y);
-                }
-                ctx.strokeStyle = containerColor;
-                ctx.lineWidth = customWallThickness;
-                ctx.lineCap = 'round';
-                ctx.lineJoin = 'round';
+    function drawCustomStrokes() {
+        drawnStrokes.forEach((stroke, idx) => {
+            if (stroke.points.length < 2) return;
+            ctx.beginPath();
+            ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+            for (let i = 1; i < stroke.points.length; i++) {
+                ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+            }
+            ctx.strokeStyle = stroke.color;
+            ctx.lineWidth = stroke.thickness;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            const isActiveStroke = isDrawingActive && idx === drawnStrokes.length - 1;
+            if (isActiveStroke) {
+                ctx.save();
+                ctx.globalAlpha = 0.6;
+                ctx.stroke();
+                ctx.restore();
+            } else {
                 ctx.stroke();
             }
+        });
+    }
+
+    function drawBlobContainer() {
+        if (containerShape === 'custom') {
+            drawCustomStrokes();
             return; // Skip handles and filling
         }
 
@@ -1027,21 +1062,10 @@
         // Draw Visual Container
         drawBlobContainer();
 
-        // Draw active drawing line preview
-        if (isDrawingActive && drawnPoints.length > 1) {
-            ctx.beginPath();
-            ctx.moveTo(drawnPoints[0].x, drawnPoints[0].y);
-            for (let i = 1; i < drawnPoints.length; i++) {
-                ctx.lineTo(drawnPoints[i].x, drawnPoints[i].y);
-            }
-            ctx.strokeStyle = containerColor;
-            ctx.lineWidth = customWallThickness;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.save();
-            ctx.globalAlpha = 0.6;
-            ctx.stroke();
-            ctx.restore();
+        // While drawing the very first stroke (containerShape is not yet 'custom'),
+        // overlay the in-progress strokes on top of the existing shape so the user can see what they're drawing.
+        if (isDrawingMode && containerShape !== 'custom') {
+            drawCustomStrokes();
         }
 
         const bodies = Composite.allBodies(world);
@@ -1192,34 +1216,73 @@
 
     document.getElementById('select-shape').addEventListener('change', (e) => {
         containerShape = e.target.value;
-        if (containerShape === 'custom' && drawnPoints.length === 0) {
+        if (containerShape === 'custom' && drawnStrokes.length === 0) {
             // Force into draw mode if they select custom but haven't drawn yet
             document.getElementById('btn-draw').click();
             return;
         }
-        
+
         // If they select a non-custom shape, turn off draw mode
         if (containerShape !== 'custom') {
-            isDrawingMode = false;
-            canvas.style.cursor = 'default';
-            document.getElementById('draw-overlay').classList.add('hidden');
-            document.getElementById('btn-draw').classList.remove('bg-[#ff3b30]', 'text-[#fdfcfc]', 'border-[#ff3b30]');
-            document.getElementById('btn-draw').classList.add('border-[#201d1d]/12', 'text-[#201d1d]');
-            mouseConstraint.collisionFilter.mask = 1;
+            exitDrawMode();
         }
 
         updateBoundaries();
-        
+
         // Wake up bodies so they adapt to new boundaries immediately
         Composite.allBodies(world).forEach(b => Body.setAwake(b, true));
     });
 
+    function exitDrawMode() {
+        isDrawingMode = false;
+        isDrawingActive = false;
+        const overlay = document.getElementById('draw-overlay');
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+        document.getElementById('btn-draw').classList.remove('bg-[#ff3b30]', 'text-[#fdfcfc]', 'border-[#ff3b30]');
+        document.getElementById('btn-draw').classList.add('border-[#201d1d]/12', 'text-[#201d1d]');
+        mouseConstraint.collisionFilter.mask = 1;
+        canvas.style.cursor = 'default';
+    }
+
     document.getElementById('btn-draw').addEventListener('click', () => {
         isDrawingMode = true;
         canvas.style.cursor = 'crosshair';
-        document.getElementById('draw-overlay').classList.remove('hidden');
+        const overlay = document.getElementById('draw-overlay');
+        overlay.classList.remove('hidden');
+        overlay.classList.add('flex');
         document.getElementById('btn-draw').classList.remove('border-[#201d1d]/12', 'text-[#201d1d]');
         document.getElementById('btn-draw').classList.add('bg-[#ff3b30]', 'text-[#fdfcfc]', 'border-[#ff3b30]');
+        // Disable body grabbing while in draw mode so the user can't accidentally pick up pills
+        mouseConstraint.collisionFilter.mask = 0;
+    });
+
+    document.getElementById('btn-clear-strokes').addEventListener('click', () => {
+        drawnStrokes = [];
+        if (containerShape === 'custom') {
+            updateBoundaries();
+            Composite.allBodies(world).forEach(b => Body.setAwake(b, true));
+        }
+    });
+
+    document.getElementById('btn-done-drawing').addEventListener('click', () => {
+        const hadStrokes = drawnStrokes.length > 0;
+        exitDrawMode();
+        if (!hadStrokes && containerShape === 'custom') {
+            // User opened draw mode but didn't draw anything — fall back to the default shape
+            containerShape = 'initial';
+            document.getElementById('select-shape').value = 'initial';
+            updateBoundaries();
+        }
+    });
+
+    document.getElementById('brush-color').addEventListener('input', (e) => {
+        currentBrushColor = e.target.value;
+    });
+
+    document.getElementById('brush-thickness').addEventListener('input', (e) => {
+        currentBrushThickness = parseInt(e.target.value);
+        document.getElementById('brush-thickness-val').innerText = currentBrushThickness;
     });
 
     document.getElementById('color-text-pill').addEventListener('input', (e) => {
@@ -1294,12 +1357,37 @@
 
     // Resize Handler
     window.addEventListener('resize', () => {
+        const oldContainerX = container.x;
+        const oldContainerY = container.y;
+
         width = window.innerWidth;
         height = window.innerHeight;
         canvas.width = width;
         canvas.height = height;
-        
+
         adjustLayout();
+
+        // Translate bodies and custom strokes by the container's shift so they stay relative to it,
+        // otherwise resizing the window leaves everything stranded outside the new container.
+        const dx = container.x - oldContainerX;
+        const dy = container.y - oldContainerY;
+        if (Number.isFinite(dx) && Number.isFinite(dy) && (dx !== 0 || dy !== 0)) {
+            [...textBodies, ...dotBodies].forEach(b => {
+                if (b && b.position) {
+                    Body.setPosition(b, {
+                        x: b.position.x + dx,
+                        y: b.position.y + dy
+                    });
+                }
+            });
+            drawnStrokes.forEach(stroke => {
+                stroke.points.forEach(pt => {
+                    pt.x += dx;
+                    pt.y += dy;
+                });
+            });
+        }
+
         updateBoundaries();
         // Slightly nudge bodies to wake them up on resize
         Composite.allBodies(world).forEach(b => Body.setAwake(b, true));
